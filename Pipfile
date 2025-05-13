@@ -6,9 +6,10 @@ name = "pypi"
 [packages]
 selenium = "*"
 pandas = "*"
-pymongo = "*"
 webdriver-manager = "*"
-playwright = "*"
+dotenv = "*"
+pymongo = "*"
+tqdm = "*"
 
 [dev-packages]
 
