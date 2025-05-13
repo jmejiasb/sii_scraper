@@ -1,4 +1,3 @@
-import os
 import time
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -8,22 +7,10 @@ from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
-from pathlib import Path
 import csv
-
-def get_chrome_user_data_path() -> Path:
-    """
-    Returns the path to Chrome's User Data folder on Windows by using the LOCALAPPDATA env var.
-    """
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    if not local_app_data:
-        raise EnvironmentError("Could not find LOCALAPPDATA environment variable.")
-    return Path(local_app_data) / "Google" / "Chrome" / "User Data"
+from sii_scraper.sii_scraper import SiiScraper
 
 def main():
-
-    user_data_path = get_chrome_user_data_path()
-    print(f"Using Chrome user data at: {user_data_path}")
 
     options = Options()
     # options.add_argument("--headless=new")
@@ -31,7 +18,11 @@ def main():
     # options.add_argument(f"--profile-directory=Default"
     options.add_experimental_option("detach", True)
 
-    prefs = {"profile.managed_default_content_settings.images": 2}
+    prefs = {
+        "profile.managed_default_content_settings.images": 2,
+        "profile.managed_default_content_settings.fonts": 2,
+        "profile.managed_default_content_settings.stylesheets": 2,
+    }
     options.add_experimental_option("prefs", prefs)
 
     service = Service(ChromeDriverManager().install())
@@ -52,14 +43,14 @@ def main():
         print("Confirm text:", alert.text)
         alert.accept()
 
-        services_menu = WebDriverWait(driver, 10).until(
+        services_menu = wait.until(
             EC.presence_of_element_located((By.LINK_TEXT, "Servicios online"))
         )
 
         actions = ActionChains(driver)
         actions.move_to_element(services_menu).click().perform()
 
-        factura_link = WebDriverWait(driver, 10).until(
+        factura_link = wait.until(
             EC.element_to_be_clickable((By.LINK_TEXT, "Factura electrónica"))
         )
 
@@ -81,20 +72,32 @@ def main():
 
         registro.click()
 
+        wait.until(lambda d: len(
+            d.find_elements(By.CSS_SELECTOR, "select[name='rut'] option")
+        ) > 2)
+
         # Convertir esto a un for loop
         rut_select = wait.until(EC.element_to_be_clickable((By.NAME, "rut")))
+        select = Select(rut_select)
+        option_count = len(select.options)
 
-        all_opts = rut_select.find_elements(By.TAG_NAME, "option")
-        ruts = [o.get_attribute("value") for o in all_opts if o.get_attribute("value").strip()]
-        print("Will iterate RUTs:", ruts)
+        # ruts = [opt.text.strip() for opt in all_opts if opt.text.strip() and opt.text.strip() != "" and opt.text.strip() == "Empresa"]
+        # print("Will iterate RUTs:", ruts)
         
         all_rows = []
-        headers = None
+        headers = []
 
-        for rut in ruts: 
+        wait = WebDriverWait(driver, 2)
+
+        for idx in range(1, option_count): 
             sel = Select(rut_select)
-            sel.select_by_value(rut)  # index 0 = placeholder, 1 = first RUT, 2 = second RUT
+            sel.select_by_index(idx)  # index 0 = placeholder, 1 = first RUT, 2 = second RUT
             # time.sleep(5)
+
+            rut_value = sel.first_selected_option.get_attribute("value")
+            # (or use .text if you prefer the visible text)
+            print(f"→ Scraping for RUT {rut_value!r}")
+
             # 2) Click “Consultar”
             consult_btn = driver.find_element(
                 By.CSS_SELECTOR,
@@ -103,14 +106,16 @@ def main():
 
             consult_btn.click()
 
+            time.sleep(0.5)
+
             try:
-                factura = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((
+                factura = wait.until(EC.element_to_be_clickable((
                     By.XPATH,
                     "//a[contains(text(),'Factura Electrónica') and @ui-sref]"
                 )))
                 factura.click()
             except:
-                print(f"→ No Factura Electrónica link for RUT {rut}, skipping.")
+                print(f"→ No Factura Electrónica link for RUT {rut_value}, skipping.")
                 continue
 
 
@@ -138,7 +143,7 @@ def main():
             # Extract rows
             for tr in driver.find_elements(By.CSS_SELECTOR, "#tableCompra tbody tr"):
                 cells = [td.text.strip() for td in tr.find_elements(By.TAG_NAME, "td")]
-                cells.append(rut)  # tag them with the RUT we used
+                cells.append(rut_value)  # tag them with the RUT we used
                 all_rows.append(cells)
                 
         if all_rows:
@@ -153,6 +158,11 @@ def main():
     finally:
         driver.quit()
 
+
+
 if __name__ == "__main__":
-    main()
+    scraper = SiiScraper()
+    df = scraper.scrape_all()
+    df.to_csv("compras_df.csv")
+    scraper.driver.quit()
 
