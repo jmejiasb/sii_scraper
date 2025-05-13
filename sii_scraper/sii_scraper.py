@@ -117,7 +117,7 @@ class SiiScraper:
                     )))
                     factura.click()
                 except:
-                    print(f"→ No Factura Electrónica link for RUT {rut_value}, skipping.")
+                    print(f"→No Factura Electrónica link para RUT {rut_value}, saltando.")
                     continue
 
 
