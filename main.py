@@ -1,4 +1,5 @@
 import os
+import re
 import pandas as pd
 from tqdm import tqdm
 from dotenv import load_dotenv
@@ -58,6 +59,24 @@ def clean_and_normalize(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
+def load_all_credentials():
+    """
+    Scan os.environ for SII_USER_X / SII_PASS_X and return
+    { user_email: password, … }
+    """
+    creds = {}
+    for var, val in os.environ.items():
+        m = re.match(r"SII_USER_(\d+)", var)
+        if not m:
+            continue
+        idx = m.group(1)
+        user = val
+        pw_var = f"SII_PASS_{idx}"
+        pw = os.getenv(pw_var)
+        if pw:
+            creds[user] = pw
+    return creds
+
 def main(): 
 
     atlas_uri = os.getenv("MONGODB_URI")
@@ -66,10 +85,22 @@ def main():
     inv_supplier = db.invoices_supplier
     print("Conectado a base de datos")
 
-    scraper = SiiScraper()
+    creds = load_all_credentials()
+    if not creds:
+        raise RuntimeError("No SII_USER_N / SII_PASS_N found in environment.")
+
+    all_dfs = []
     print("Obteniendo datos de facturas desde SII")
-    df = scraper.scrape_all()
+    for user, pw in creds.items():
+        print(f"Scraping facturas para {user}…")
+        scraper = SiiScraper(user, pw)
+        df = scraper.scrape_all()
+        df["sii_user"] = user
+        all_dfs.append(df)
+    
+    # df = scraper.scrape_all()
     #For debug
+    df = pd.concat(all_dfs, ignore_index=True)
     df.to_csv("compras_df.csv", sep=";")
 
     df_cleaned = clean_and_normalize(df)

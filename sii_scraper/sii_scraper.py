@@ -10,8 +10,12 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 
 class SiiScraper: 
-    def __init__(self, headless:bool = False):
+    def __init__(self, user: str, pwd: str, headless:bool = False):
         options = Options()
+
+        self.user = user
+        self.pwd = pwd
+
         if headless:
             options.add_argument("--headless=new")
         options.add_experimental_option("detach", True)
@@ -30,14 +34,31 @@ class SiiScraper:
         self.driver.get("https://zeusr.sii.cl//AUT2000/InicioAutenticacion/IngresoRutClave.html?https://misiir.sii.cl/cgi_misii/siihome.cgi")
         
 
-        login_link = self.wait.until(EC.element_to_be_clickable((By.ID, "mienlace")))
+        login_link = self.wait.until(EC.element_to_be_clickable((By.ID, "myHref")))
         login_link.click()
 
-        self.wait.until(EC.alert_is_present())
+        # self.wait.until(EC.alert_is_present())
 
-        alert = self.driver.switch_to.alert
-        # print("Confirm text:", alert.text)
-        alert.accept()
+        # alert = self.driver.switch_to.alert
+        # # print("Confirm text:", alert.text)
+        # alert.accept()
+
+        run_input = self.wait.until(
+            EC.element_to_be_clickable((By.ID, "uname"))
+        )
+        run_input.clear()
+        run_input.send_keys(self.user)
+
+        pwd_input = self.wait.until(
+            EC.element_to_be_clickable((By.ID, "pword"))
+        )
+        pwd_input.clear()
+        pwd_input.send_keys(self.pwd)
+
+        submit_btn = self.wait.until(
+            EC.element_to_be_clickable((By.ID, "login-submit"))
+        )
+        submit_btn.click()
 
         services_menu = self.wait.until(
             EC.presence_of_element_located((By.LINK_TEXT, "Servicios online"))
@@ -101,6 +122,10 @@ class SiiScraper:
                 rut_value = sel.first_selected_option.get_attribute("value")
                 # (or use .text if you prefer the visible text)
                 print(f"Obteniendo facturas para RUT {rut_value!r}")
+
+                self.wait.until(
+                    EC.invisibility_of_element_located((By.ID, "esperaDialog"))
+                )
 
                 # 2) Click “Consultar”
                 consult_btn = self.driver.find_element(
