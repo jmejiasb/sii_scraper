@@ -59,7 +59,7 @@ def clean_and_normalize(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
-def load_all_credentials():
+def load_all_credentials() -> dict:
     """
     Scan os.environ for SII_USER_X / SII_PASS_X and return
     { user_email: password, … }
@@ -93,7 +93,7 @@ def main():
     print("Obteniendo datos de facturas desde SII")
     for user, pw in creds.items():
         print(f"Scraping facturas para {user}…")
-        scraper = SiiScraper(user, pw)
+        scraper = SiiScraper(user, pw, True)
         df = scraper.scrape_all()
         df["sii_user"] = user
         all_dfs.append(df)

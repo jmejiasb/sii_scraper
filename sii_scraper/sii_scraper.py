@@ -17,8 +17,13 @@ class SiiScraper:
         self.pwd = pwd
 
         if headless:
-            options.add_argument("--headless=new")
+            options.add_argument("--headless")
         options.add_experimental_option("detach", True)
+        options.add_argument("--window-size=1920,1080")
+        options.add_argument("--disable-gpu")               # recommended for Linux
+        options.add_argument("--no-sandbox")                # recommended in many CI systems
+        options.add_argument("--disable-dev-shm-usage")  
+        
         prefs = {
             "profile.managed_default_content_settings.images": 2,
             "profile.managed_default_content_settings.fonts": 2,
@@ -28,7 +33,7 @@ class SiiScraper:
 
         service = Service(ChromeDriverManager().install())
         self.driver = webdriver.Chrome(service=service, options=options)
-        self.wait = WebDriverWait(self.driver, 20)
+        self.wait = WebDriverWait(self.driver, 30)
 
     def login_and_navigate(self):
         self.driver.get("https://zeusr.sii.cl//AUT2000/InicioAutenticacion/IngresoRutClave.html?https://misiir.sii.cl/cgi_misii/siihome.cgi")

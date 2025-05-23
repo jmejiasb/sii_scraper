@@ -7,5 +7,5 @@ python main.py
 
 REM ─ Pause so the console stays open for the user to see any output/errors ─
 echo.
-echo Press any key to exit…
+echo Press any key to exit
 pause >nul
