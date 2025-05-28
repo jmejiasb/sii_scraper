@@ -1,5 +1,6 @@
 import os
 import re
+import argparse
 import pandas as pd
 from tqdm import tqdm
 from dotenv import load_dotenv
@@ -126,5 +127,36 @@ def main():
 
     print(f"\nFinalizado: {inserted} nuevas facturas insertadas")
 
+def debug_scraper(): 
+
+    creds = load_all_credentials()
+    if not creds:
+        raise RuntimeError("No SII_USER_N / SII_PASS_N found in environment.")
+
+    all_dfs = []
+    print("Obteniendo datos de facturas desde SII")
+    for user, pw in creds.items():
+        print(f"Scraping facturas para {user}…")
+        scraper = SiiScraper(user, pw, False)
+        df = scraper.scrape_all()
+        df["sii_user"] = user
+        df.to_csv("debug.csv")
+        all_dfs.append(df)
+        break
+
+    print(all_dfs)
+
 if __name__ == "__main__":
-    main()
+
+    parser = argparse.ArgumentParser(description="Run the SII scraper")
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="run the debug_scraper() instead of main()"
+    )
+    args = parser.parse_args()
+
+    if args.debug:
+        debug_scraper()
+    else:
+        main()
