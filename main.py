@@ -14,9 +14,13 @@ def clean_and_normalize(df: pd.DataFrame) -> pd.DataFrame:
 
     df = df.copy()
 
-    df = df[["supplier_id", "supplier_name", "number", "date", "date_accepted", "type", "exent_total", "net_total", "iva", "other_tax", "total", "rut_holding"]]
+    df = df[[
+        "supplier_id", "supplier_name", "number", "date", "date_accepted", 
+        "type", "exent_total", "net_total", "iva", "other_tax", 
+        "total", "rut_holding", "status", "doc_type"
+    ]]
 
-    cols = ["supplier_id", "supplier_name", "type"]
+    cols = ["supplier_id", "supplier_name", "type", "status", "doc_type"]
 
     df[cols] = (
         df[cols]
@@ -111,7 +115,7 @@ def main():
     inserted = 0
 
     for _, row in tqdm(df_cleaned.iterrows(), total=total, 
-                      desc="Agregando facturas a BBDD", unit="inv"):
+                      desc="Sicronizando facturas", unit="inv"):
         
         # build your dedupe filter
         filt = {
@@ -119,13 +123,22 @@ def main():
             "number":      row["number"],
         }
 
-        # if no existing document matches…
-        if inv_supplier.count_documents(filt, limit=1) == 0:
-            # convert the pandas Series → dict and insert
-            inv_supplier.insert_one(row.to_dict())
+        data = row.to_dict()
+
+        result = inv_supplier.update_one(
+            filt,
+            {"$set": {"status": data["status"]}}
+        )
+
+        if result.matched_count:
+            # an existing document was found and updated
+            updated += 1
+        else:
+            # no existing doc → insert it
+            inv_supplier.insert_one(data)
             inserted += 1
 
-    print(f"\nFinalizado: {inserted} nuevas facturas insertadas")
+    print(f"\nFinalizado: {inserted} nuevas facturas insertadas, {updated} facturas actualizadas")
 
 def debug_scraper(): 
 

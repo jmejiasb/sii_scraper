@@ -1,4 +1,5 @@
 import pandas as pd
+import time
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -19,7 +20,6 @@ class SiiScraper:
 
         if headless:
             options.add_argument("--headless")
-        options.add_experimental_option("detach", True)
         options.add_argument("--window-size=1920,1080")
         options.add_argument("--disable-gpu")               # recommended for Linux
         options.add_argument("--no-sandbox")                # recommended in many CI systems
@@ -32,9 +32,6 @@ class SiiScraper:
         }
         options.add_experimental_option("prefs", prefs)
 
-        if not headless:
-            options.add_experimental_option("detach", True)
-
         service = Service(ChromeDriverManager().install())
         self.driver = webdriver.Chrome(service=service, options=options)
         self.wait = WebDriverWait(self.driver, 30)
@@ -42,9 +39,22 @@ class SiiScraper:
     def login_and_navigate(self):
         self.driver.get("https://zeusr.sii.cl//AUT2000/InicioAutenticacion/IngresoRutClave.html?https://misiir.sii.cl/cgi_misii/siihome.cgi")
         
-
-        login_link = self.wait.until(EC.element_to_be_clickable((By.ID, "myHref")))
-        login_link.click()
+        attempt = 1
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                login_link = WebDriverWait(self.driver, self.wait._timeout).until(
+                    EC.element_to_be_clickable((By.ID, "myHref"))
+                )
+                # scroll into view just in case
+                login_link.click()
+                break  # success — exit the function
+            except TimeoutException:
+                print(f"→ Attempt {attempt}/{max_retries} to click login_link timed out.")
+                if attempt < max_retries:
+                    time.sleep(1)  # give it a moment before retrying
+                else:
+                    raise
 
         # self.wait.until(EC.alert_is_present())
 
@@ -72,6 +82,7 @@ class SiiScraper:
         services_menu = self.wait.until(
             EC.presence_of_element_located((By.LINK_TEXT, "Servicios online"))
         )
+        print("Menu servicios online")
 
         actions = ActionChains(self.driver)
         actions.move_to_element(services_menu).click().perform()
@@ -79,6 +90,7 @@ class SiiScraper:
         factura_link = self.wait.until(
             EC.element_to_be_clickable((By.LINK_TEXT, "Factura electrónica"))
         )
+        print("Menu factura electronica")
 
         # 4) Click it
         factura_link.click()
@@ -98,15 +110,13 @@ class SiiScraper:
 
         registro.click()
 
+        print("Ingresando al registro de compras y ventas")
+
     def _scrape_section(self, wait, link_xpath: str, status: str, doc_type: str, rut_value: str, all_rows: list, is_pending: bool = False):
         """
         Clicks the link identified by link_xpath, scrapes all rows into all_rows
         tagging them with (rut_value, status, doc_type), then clicks “Volver” to go back.
         """
-        els = self.driver.find_elements(By.XPATH, link_xpath)
-        print(f"→ Found {len(els)} links:")
-        for e in els:
-            print("   >", e.text)
 
         try:
             btn = wait.until(EC.element_to_be_clickable((By.XPATH, link_xpath)))
@@ -121,15 +131,21 @@ class SiiScraper:
             )
             # dismiss it
             modal.find_element(By.CSS_SELECTOR, ".modal-footer .btn-danger").click()
-            print(f"→No {doc_type} para RUT {rut_value}, skipping.")
             return
         except:
             # modal did not appear → proceed
             pass
-        
-        length_sel = wait.until(EC.element_to_be_clickable(
-            (By.CSS_SELECTOR, "select[name='tableCompra_length']")
-        ))
+
+        length_sel = self.wait.until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "select[name='tableCompra_length']"))
+        )
+
+        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", length_sel)
+
+        length_sel = self.wait.until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "select[name='tableCompra_length']"))
+        )
+
         Select(length_sel).select_by_value("100")
 
         wait.until(lambda d: len(
@@ -263,7 +279,10 @@ class SiiScraper:
                     "form[name='formContribuyente'] button[type='submit']"
                 )
 
-                consult_btn.click()
+                try:
+                    consult_btn.click()
+                except ElementClickInterceptedException:
+                    self.driver.execute_script("arguments[0].click();", consult_btn)
 
                 # self._scrape_section(
                 #     wait,
@@ -333,8 +352,6 @@ class SiiScraper:
                     all_rows=all_rows,
                     is_pending=True
                 )
-
-            print(all_rows)
 
             if all_rows:
                 df = pd.DataFrame(all_rows, columns=headers, dtype=str)
