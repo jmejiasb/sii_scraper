@@ -113,7 +113,7 @@ def main():
 
     total = len(df_cleaned)
     inserted = 0
-
+    updated = 0
     for _, row in tqdm(df_cleaned.iterrows(), total=total, 
                       desc="Sicronizando facturas", unit="inv"):
         

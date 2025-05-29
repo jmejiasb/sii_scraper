@@ -8,7 +8,7 @@ from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.common.exceptions import TimeoutException, ElementClickInterceptedException
+from selenium.common.exceptions import TimeoutException, ElementClickInterceptedException, NoSuchElementException
 
 
 class SiiScraper: 
@@ -112,7 +112,100 @@ class SiiScraper:
 
         print("Ingresando al registro de compras y ventas")
 
-    def _scrape_section(self, wait, link_xpath: str, status: str, doc_type: str, rut_value: str, all_rows: list, is_pending: bool = False):
+    def _scrape_pending(self, wait, link_xpath: str, status: str, doc_type: str, rut_value: str, all_rows: list):
+        
+        try:
+            link_el = self.driver.find_element(By.XPATH, link_xpath)
+        except NoSuchElementException:
+            print(f"→ No {status} link for RUT {rut_value}, skipping.")
+            return
+        
+        try:
+            count_td = link_el.find_element(
+                By.XPATH,
+                "ancestor::td/following-sibling::td[1]"
+            )
+            # strip dots and parse
+            count = int(count_td.text.replace(".", "").strip() or 0)
+        except (NoSuchElementException, ValueError):
+            print(f"→ Couldn't read count next to {doc_type} for RUT {rut_value}, skipping.")
+            return
+        
+        if count <= 0:
+            print(f"→ {doc_type} count is {count} for RUT {rut_value}, not scraping.")
+            return
+        
+        for attempt in range(2):
+            try:
+                # ensure no leftover backdrops
+                wait.until(EC.invisibility_of_element_located(
+                    (By.CSS_SELECTOR, "div.modal-backdrop")
+                ))
+                # scroll into view then click
+                self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", link_el)
+                link_el.click()
+                break
+            except ElementClickInterceptedException:
+                print("→ Click intercepted by backdrop, retrying…")
+                # try to dismiss any open alert-modal
+                try:
+                    modal = self.driver.find_element(By.ID, "alert-modal")
+                    modal.find_element(By.CSS_SELECTOR, ".modal-footer .btn-danger").click()
+                except NoSuchElementException:
+                    pass
+                # then wait a moment for backdrop to disappear
+                wait.until(EC.invisibility_of_element_located(
+                    (By.CSS_SELECTOR, "div.modal-backdrop")
+                ))
+        else:
+            print(f"→ Failed to click {doc_type} after retry, skipping.")
+            return
+
+        length_sel = wait.until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "select[name='tableCompra_length']"))
+        )
+        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", length_sel)
+        length_sel = wait.until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "select[name='tableCompra_length']"))
+        )
+        Select(length_sel).select_by_value("100")    
+
+        for tr in self.driver.find_elements(By.CSS_SELECTOR, "#tableCompra tbody tr"):
+            
+            tds = tr.find_elements(By.TAG_NAME, "td")
+
+
+            supplier_link = tds[2].find_element(By.TAG_NAME, "a")
+            supplier_id   = supplier_link.text.strip()
+            supplier_name = supplier_link.get_attribute("data-original-title")
+
+            row = []
+
+            row = [
+                tds[1].text.strip(),
+                supplier_id,
+                supplier_name,
+                *[td.text.strip() for td in tds[3:7]],
+                "",
+                *[td.text.strip() for td in tds[7:-1]],
+                0,
+                0,
+                0,
+                tds[-1].text.strip(),
+                rut_value, 
+                status,
+                doc_type
+            ]
+
+            all_rows.append(row)
+
+
+        volver_btn = wait.until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "button[ng-click='doTheBack()']"))
+        )
+        volver_btn.click()
+
+    def _scrape_section(self, wait, link_xpath: str, status: str, doc_type: str, rut_value: str, all_rows: list):
         """
         Clicks the link identified by link_xpath, scrapes all rows into all_rows
         tagging them with (rut_value, status, doc_type), then clicks “Volver” to go back.
@@ -124,17 +217,6 @@ class SiiScraper:
         except:
             print(f"→No {status} link for RUT {rut_value}, skipping.")
             return
-        
-        try:
-            modal = wait.until(
-                EC.visibility_of_element_located((By.ID, "alert-modal"))
-            )
-            # dismiss it
-            modal.find_element(By.CSS_SELECTOR, ".modal-footer .btn-danger").click()
-            return
-        except:
-            # modal did not appear → proceed
-            pass
 
         length_sel = self.wait.until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "select[name='tableCompra_length']"))
@@ -156,46 +238,22 @@ class SiiScraper:
             
             tds = tr.find_elements(By.TAG_NAME, "td")
 
-            data_cells = []
-
-            if is_pending: 
-                data_cells = tds[1:]
-            else:
-                data_cells = tds
-
-            supplier_link = data_cells[1].find_element(By.TAG_NAME, "a")
+            supplier_link = tds[1].find_element(By.TAG_NAME, "a")
             supplier_id   = supplier_link.text.strip()
             supplier_name = supplier_link.get_attribute("data-original-title")
 
             # row_values = [data_cells[0].text.strip()]                # type_purchase
             row = []
 
-            if is_pending: 
-                row = [
-                    data_cells[0].text.strip(),
-                    supplier_id,
-                    supplier_name,
-                    *[td.text.strip() for td in data_cells[2:6]],
-                    "",
-                    *[td.text.strip() for td in data_cells[6:-1]],
-                    0,
-                    0,
-                    0,
-                    data_cells[-1].text.strip(),
-                    rut_value, 
-                    status,
-                    doc_type
-                ]
-            else:
-                row = [
-                    data_cells[0].text.strip(),
-                    supplier_id,
-                    supplier_name,
-                    *[td.text.strip() for td in data_cells[2:]],
-                    rut_value, 
-                    status,
-                    doc_type
-                ]
+            row = [
+                tds[0].text.strip(),
+                supplier_id,
+                supplier_name,
+                *[td.text.strip() for td in tds[2:]],
+                rut_value, 
+                status,
+                doc_type
+            ]
 
             all_rows.append(row)
 
@@ -239,9 +297,15 @@ class SiiScraper:
         try:
             self.login_and_navigate()
 
-            self.wait.until(lambda d: len(
-                d.find_elements(By.CSS_SELECTOR, "select[name='rut'] option")
-            ) > 2)
+            try: 
+                self.wait.until(lambda d: len(
+                    d.find_elements(By.CSS_SELECTOR, "select[name='rut'] option")
+                ) > 2)
+
+            except TimeoutException:
+                self.wait.until(lambda d: len(
+                    d.find_elements(By.CSS_SELECTOR, "select[name='rut'] option")
+                ) > 2)
 
             # Convertir esto a un for loop
             rut_select = self.wait.until(EC.element_to_be_clickable((By.NAME, "rut")))
@@ -284,73 +348,68 @@ class SiiScraper:
                 except ElementClickInterceptedException:
                     self.driver.execute_script("arguments[0].click();", consult_btn)
 
-                # self._scrape_section(
-                #     wait,
-                #     "//a[contains(text(),'Factura Electrónica') and @ui-sref]",
-                #     status="accepted",
-                #     doc_type="invoice",
-                #     rut_value=rut_value,
-                #     all_rows=all_rows
-                # )
-                # self._scrape_section(
-                #     wait,
-                #     "//a[contains(text(),'Factura no Afecta o Exenta Electrónica') and @ui-sref]",
-                #     status="accepted_exempt",
-                #     doc_type="invoice",
-                #     rut_value=rut_value,
-                #     all_rows=all_rows
-                # )
-                # self._scrape_section(
-                #     wait,
-                #     "//a[contains(text(),'Nota de Crédito Electrónica') and @ui-sref]",
-                #     status="accepted",
-                #     doc_type="credit_note",
-                #     rut_value=rut_value,
-                #     all_rows=all_rows
-                # )
+                self._scrape_section(
+                    wait,
+                    "//a[contains(text(),'Factura Electrónica') and @ui-sref]",
+                    status="accepted",
+                    doc_type="invoice",
+                    rut_value=rut_value,
+                    all_rows=all_rows
+                )
+
+                self._scrape_section(
+                    wait,
+                    "//a[contains(text(),'Factura no Afecta o Exenta Electrónica') and @ui-sref]",
+                    status="accepted_exempt",
+                    doc_type="invoice",
+                    rut_value=rut_value,
+                    all_rows=all_rows
+                )
+                
+                self._scrape_section(
+                    wait,
+                    "//a[contains(text(),'Nota de Crédito Electrónica') and @ui-sref]",
+                    status="accepted",
+                    doc_type="credit_note",
+                    rut_value=rut_value,
+                    all_rows=all_rows
+                )
 
                 self._click_pendientes()
 
-                data = wait.until(EC.presence_of_element_located((
-                    By.XPATH,
-                    "//div[contains(@class,'panel-primary')]"
-                )))
-                if not data:
-                    print(f"→ No hay información de Pendientes para RUT {rut_value}, saltando.")
+                try:
+                    wait.until(EC.presence_of_element_located(
+                        (By.XPATH, "//td[@ng-if=\"(row.rsmnLink)\"]")
+                    ))
+                except TimeoutException:
+                    print(f"→ No pending‐documents table for RUT {rut_value}, skipping.")
                     continue
 
-                self._scrape_section(
+                self._scrape_pending(
                     wait,
                      "//a[@ui-sref and contains(normalize-space(.), 'Factura Electrónica')]",
                     status="pending",
                     doc_type="invoice",
                     rut_value=rut_value,
                     all_rows=all_rows,
-                    is_pending=True
                 )
 
-                self._click_pendientes()
-
-                self._scrape_section(
+                self._scrape_pending(
                     wait,
                     "//a[@ui-sref and contains(normalize-space(.), 'Factura no Afecta o Exenta Electrónica')]",
                     status="pending_exempt",
                     doc_type="invoice",
                     rut_value=rut_value,
                     all_rows=all_rows,
-                    is_pending=True
                 )
 
-                self._click_pendientes()
-
-                self._scrape_section(
+                self._scrape_pending(
                     wait,
                     "//a[@ui-sref and contains(normalize-space(.), 'Nota de Crédito Electrónica')]",
                     status="pending",
                     doc_type="credit_note",
                     rut_value=rut_value,
                     all_rows=all_rows,
-                    is_pending=True
                 )
 
             if all_rows:
