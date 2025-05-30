@@ -2,6 +2,8 @@
 REM ─ Change directory to where this .bat lives ─
 cd /d "%~dp0"
 
+git pull origin main
+
 REM ─ Run your Python script ─
 python main.py
 
