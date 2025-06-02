@@ -324,6 +324,10 @@ class SiiScraper:
 
             wait = WebDriverWait(self.driver, 2)
 
+            # periodoMes = self.wait.until(EC.element_to_be_clickable((By.ID, "periodoMes")))
+            # month_sel = Select(periodoMes)
+            # month_sel.select_by_value("05")
+
             for idx in range(1, option_count): 
                 sel = Select(rut_select)
                 sel.select_by_index(idx)  # index 0 = placeholder, 1 = first RUT, 2 = second RUT
