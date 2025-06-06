@@ -118,14 +118,14 @@ class SiiScraper:
             link_el = wait.until(
                 EC.element_to_be_clickable((By.XPATH, link_xpath))
             )
-        except NoSuchElementException:
+        except:
             print(f"→ No {status} - {doc_type} link for RUT {rut_value}, skipping.")
             return
         
         try:
             count_td = link_el.find_element(
                 By.XPATH,
-                "ancestor::td/following-sibling::td[1]"
+                ".//ancestor::td/following-sibling::td[1]"
             )
             # strip dots and parse
             count = int(count_td.text.replace(".", "").strip() or 0)
@@ -176,8 +176,12 @@ class SiiScraper:
             
             tds = tr.find_elements(By.TAG_NAME, "td")
 
-
-            supplier_link = tds[2].find_element(By.TAG_NAME, "a")
+            supplier_link = ""
+            try:
+                supplier_link = tds[1].find_element(By.TAG_NAME, "a")
+            except NoSuchElementException:
+                supplier_link = tds[2].find_element(By.TAG_NAME, "a")
+                
             supplier_id   = supplier_link.text.strip()
             supplier_name = supplier_link.get_attribute("data-original-title")
 
