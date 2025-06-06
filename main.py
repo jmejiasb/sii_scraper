@@ -151,7 +151,7 @@ def debug_scraper():
     for user, pw in creds.items():
         print(f"Scraping facturas para {user}…")
         scraper = SiiScraper(user, pw, False)
-        df = scraper.scrape_all()
+        df = scraper.scrape_one("76339858-7")
         df["sii_user"] = user
         df.to_csv("debug.csv")
         all_dfs.append(df)
