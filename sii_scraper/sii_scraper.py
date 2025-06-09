@@ -162,7 +162,7 @@ class SiiScraper:
         else:
             print(f"→ Failed to click {doc_type} after retry, skipping.")
             return
-
+        
         length_sel = wait.until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "select[name='tableCompra_length']"))
         )
