@@ -164,12 +164,9 @@ class SiiScraper:
             return
         
         length_sel = wait.until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "select[name='tableCompra_length']"))
-        )
-        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", length_sel)
-        length_sel = wait.until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, "select[name='tableCompra_length']"))
         )
+        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", length_sel)
         Select(length_sel).select_by_value("100")    
 
         for tr in self.driver.find_elements(By.CSS_SELECTOR, "#tableCompra tbody tr"):
@@ -239,22 +236,59 @@ class SiiScraper:
         """
 
         try:
-            btn = wait.until(EC.element_to_be_clickable((By.XPATH, link_xpath)))
-            btn.click()
+            link_el = wait.until(
+                EC.element_to_be_clickable((By.XPATH, link_xpath))
+            )
         except:
-            print(f"→No {status} - {doc_type} link for RUT {rut_value}, skipping.")
+            print(f"→ No {status} - {doc_type} link for RUT {rut_value}, skipping.")
+            return
+        
+        try:
+            count_td = link_el.find_element(
+                By.XPATH,
+                ".//ancestor::td/following-sibling::td[1]"
+            )
+            # strip dots and parse
+            count = int(count_td.text.replace(".", "").strip() or 0)
+        except (NoSuchElementException, ValueError):
+            print(f"→ Couldn't read count next to {doc_type} for RUT {rut_value}, skipping.")
+            return
+        
+        if count <= 0:
+            print(f"→ {doc_type} count is {count} for RUT {rut_value}, not scraping.")
+            return
+        
+        for attempt in range(2):
+            try:
+                # ensure no leftover backdrops
+                wait.until(EC.invisibility_of_element_located(
+                    (By.CSS_SELECTOR, "div.modal-backdrop")
+                ))
+                # scroll into view then click
+                self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", link_el)
+                link_el.click()
+                break
+            except ElementClickInterceptedException:
+                print("→ Click intercepted by backdrop, retrying…")
+                # try to dismiss any open alert-modal
+                try:
+                    modal = self.driver.find_element(By.ID, "alert-modal")
+                    modal.find_element(By.CSS_SELECTOR, ".modal-footer .btn-danger").click()
+                except NoSuchElementException:
+                    pass
+                # then wait a moment for backdrop to disappear
+                wait.until(EC.invisibility_of_element_located(
+                    (By.CSS_SELECTOR, "div.modal-backdrop")
+                ))
+        else:
+            print(f"→ Failed to click {doc_type} after retry, skipping.")
             return
 
-        length_sel = self.wait.until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "select[name='tableCompra_length']"))
-        )
-
-        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", length_sel)
-
-        length_sel = self.wait.until(
+        length_sel = wait.until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, "select[name='tableCompra_length']"))
         )
 
+        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", length_sel)
         Select(length_sel).select_by_value("100")
 
         wait.until(lambda d: len(
@@ -292,12 +326,12 @@ class SiiScraper:
 
         volver_btn.click()
 
-    def _click_pendientes(self):
+    def _click_pendientes(self, wait):
         """
         Wait for the “Pendientes” tab to be clickable, then click it.
         """
 
-        self.wait.until(
+        wait.until(
             EC.invisibility_of_element_located((By.ID, "esperaDialog"))
         )
 
@@ -306,17 +340,17 @@ class SiiScraper:
             "//a[@ui-sref='compraPendiente' and normalize-space(strong/text())='Pendientes']"
         )
 
-        elem = self.wait.until(EC.presence_of_element_located(pendientes_locator))
+        elem = wait.until(EC.presence_of_element_located(pendientes_locator))
         self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", elem)
         
-        self.wait.until(EC.element_to_be_clickable(pendientes_locator))
+        wait.until(EC.element_to_be_clickable(pendientes_locator))
         try:
             elem.click()
         except ElementClickInterceptedException:
             print("→ click intercepted—falling back to JS click")
             self.driver.execute_script("arguments[0].click();", elem)
 
-        self.wait.until(
+        wait.until(
             EC.invisibility_of_element_located((By.ID, "esperaDialog"))
         )
 
@@ -349,7 +383,7 @@ class SiiScraper:
                 "tabaco_puro", "tabaco_cigarrillos", "tabaco_elaborado", "nce_or_nde", "rut_holding", "status", "doc_type"
             ]
 
-            wait = WebDriverWait(self.driver, 2)
+            wait = WebDriverWait(self.driver, 8)
 
             # periodoMes = self.wait.until(EC.element_to_be_clickable((By.ID, "periodoMes")))
             # month_sel = Select(periodoMes)
@@ -364,7 +398,7 @@ class SiiScraper:
                 # (or use .text if you prefer the visible text)
                 print(f"Obteniendo facturas para RUT {rut_value!r}")
 
-                self.wait.until(
+                wait.until(
                     EC.invisibility_of_element_located((By.ID, "esperaDialog"))
                 )
 
@@ -406,7 +440,7 @@ class SiiScraper:
                     all_rows=all_rows
                 )
 
-                self._click_pendientes()
+                self._click_pendientes(wait)
 
                 try:
                     wait.until(EC.presence_of_element_located(
@@ -536,7 +570,7 @@ class SiiScraper:
                 all_rows=all_rows
             )
 
-            self._click_pendientes()
+            self._click_pendientes(wait)
 
             try:
                 wait.until(EC.presence_of_element_located(
