@@ -142,22 +142,60 @@ def main():
 
 def debug_scraper(): 
 
+    atlas_uri = os.getenv("MONGODB_URI")
+    client = MongoClient(atlas_uri)
+    db = client.arrocera_erp_db
+    inv_supplier = db.invoices_supplier
+    print("Conectado a base de datos")
+
     creds = load_all_credentials()
     if not creds:
         raise RuntimeError("No SII_USER_N / SII_PASS_N found in environment.")
 
     all_dfs = []
     print("Obteniendo datos de facturas desde SII")
-    for user, pw in creds.items():
-        print(f"Scraping facturas para {user}…")
-        scraper = SiiScraper(user, pw, False)
-        df = scraper.scrape_one("76339858-7")
-        df["sii_user"] = user
-        df.to_csv("debug.csv")
-        all_dfs.append(df)
-        break
+
+    scraper = SiiScraper(user="", pwd="", headless=True, use_certificate=True)
+    df = scraper.scrape_all()
+    df["sii_user"] = ""
+    all_dfs.append(df)
 
     print(all_dfs)
+
+    df = pd.concat(all_dfs, ignore_index=True)
+    df.to_csv("compras_df.csv", sep=";")
+
+    df_cleaned = clean_and_normalize(df)
+    print("Limpiando datos")
+
+    total = len(df_cleaned)
+    inserted = 0
+    updated = 0
+    for _, row in tqdm(df_cleaned.iterrows(), total=total, 
+                      desc="Sicronizando facturas", unit="inv"):
+        
+        # build your dedupe filter
+        filt = {
+            "supplier_id": row["supplier_id"],
+            "number":      row["number"],
+        }
+
+        data = row.to_dict()
+
+        result = inv_supplier.update_one(
+            filt,
+            {"$set": {"status": data["status"]}}
+        )
+
+        if result.matched_count:
+            # an existing document was found and updated
+            updated += 1
+        else:
+            # no existing doc → insert it
+            inv_supplier.insert_one(data)
+            inserted += 1
+
+    print(f"\nFinalizado: {inserted} nuevas facturas insertadas, {updated} facturas actualizadas")
 
 if __name__ == "__main__":
 

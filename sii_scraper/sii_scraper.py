@@ -12,11 +12,13 @@ from selenium.common.exceptions import TimeoutException, ElementClickIntercepted
 
 
 class SiiScraper: 
-    def __init__(self, user: str, pwd: str, headless:bool = False):
+    def __init__(self, user: str, pwd: str, headless:bool = False, use_certificate = False):
         options = Options()
 
         self.user = user
         self.pwd = pwd
+
+        self.use_certificate = use_certificate
 
         if headless:
             options.add_argument("--headless")
@@ -30,6 +32,16 @@ class SiiScraper:
             "profile.managed_default_content_settings.fonts": 2,
             "profile.managed_default_content_settings.stylesheets": 2,
         }
+
+        auto_select = {
+            "pattern": "https://zeusr.sii.cl/*",
+            "filter": {"ISSUER": {"CN": "E-CERTCHILE CA FES 02"}}
+        }
+
+        prefs["ssl"] = {
+            "auto_select_certificate_for_urls": [auto_select]
+        }
+        
         options.add_experimental_option("prefs", prefs)
 
         service = Service(ChromeDriverManager().install())
@@ -78,6 +90,49 @@ class SiiScraper:
             EC.element_to_be_clickable((By.ID, "login-submit"))
         )
         submit_btn.click()
+
+        services_menu = self.wait.until(
+            EC.presence_of_element_located((By.LINK_TEXT, "Servicios online"))
+        )
+        print("Menu servicios online")
+
+        actions = ActionChains(self.driver)
+        actions.move_to_element(services_menu).click().perform()
+
+        factura_link = self.wait.until(
+            EC.element_to_be_clickable((By.LINK_TEXT, "Factura electrónica"))
+        )
+        print("Menu factura electronica")
+
+        # 4) Click it
+        factura_link.click()
+
+        accordion_link = self.wait.until(EC.element_to_be_clickable((
+            By.CSS_SELECTOR,
+            "p.accordion_special a[href='1039-3256.html']"
+        )))
+
+        # 2. Click it
+        accordion_link.click()
+
+        registro = self.wait.until(EC.element_to_be_clickable((
+            By.LINK_TEXT,
+            "Ingresar al Registro de Compras y Ventas"
+        )))
+
+        registro.click()
+
+        print("Ingresando al registro de compras y ventas")
+
+    def login_and_navigate_with_cert(self):
+
+        self.driver.get("https://zeusr.sii.cl/AUT2000/InicioAutenticacion/IngresoCertificado.html?https://misiir.sii.cl/cgi_misii/siihome.cgi")
+
+        self.wait.until(EC.alert_is_present())
+
+        alert = self.driver.switch_to.alert
+        # print("Confirm text:", alert.text)
+        alert.accept()
 
         services_menu = self.wait.until(
             EC.presence_of_element_located((By.LINK_TEXT, "Servicios online"))
@@ -200,8 +255,6 @@ class SiiScraper:
                     status,
                     doc_type
                 ]
-
-                print(row)
             
             else:
 
@@ -356,7 +409,10 @@ class SiiScraper:
 
     def scrape_all(self) -> pd.DataFrame:
         try:
-            self.login_and_navigate()
+            if self.use_certificate: 
+                self.login_and_navigate_with_cert()
+            else: 
+                self.login_and_navigate()
 
             try: 
                 self.wait.until(lambda d: len(
