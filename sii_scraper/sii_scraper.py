@@ -12,7 +12,7 @@ from selenium.common.exceptions import TimeoutException, ElementClickIntercepted
 
 
 class SiiScraper: 
-    def __init__(self, user: str, pwd: str, headless:bool = False, use_certificate = False):
+    def __init__(self, user: str, pwd: str, headless:bool = False, use_certificate = False, month:str = ""):
         options = Options()
 
         self.user = user
@@ -26,6 +26,7 @@ class SiiScraper:
         options.add_argument("--disable-gpu")               # recommended for Linux
         options.add_argument("--no-sandbox")                # recommended in many CI systems
         options.add_argument("--disable-dev-shm-usage")  
+        options.add_argument("--log-level=3")
         
         prefs = {
             "profile.managed_default_content_settings.images": 2,
@@ -47,6 +48,7 @@ class SiiScraper:
         service = Service(ChromeDriverManager().install())
         self.driver = webdriver.Chrome(service=service, options=options)
         self.wait = WebDriverWait(self.driver, 30)
+        self.month = month
 
     def login_and_navigate(self):
         self.driver.get("https://zeusr.sii.cl//AUT2000/InicioAutenticacion/IngresoRutClave.html?https://misiir.sii.cl/cgi_misii/siihome.cgi")
@@ -441,9 +443,10 @@ class SiiScraper:
 
             wait = WebDriverWait(self.driver, 8)
 
-            # periodoMes = self.wait.until(EC.element_to_be_clickable((By.ID, "periodoMes")))
-            # month_sel = Select(periodoMes)
-            # month_sel.select_by_value("05")
+            if (self.month):
+                periodoMes = self.wait.until(EC.element_to_be_clickable((By.ID, "periodoMes")))
+                month_sel = Select(periodoMes)
+                month_sel.select_by_value(self.month)
 
             for idx in range(1, option_count): 
                 sel = Select(rut_select)

@@ -98,7 +98,7 @@ def main():
     print("Obteniendo datos de facturas desde SII")
     for user, pw in creds.items():
         print(f"Scraping facturas para {user}…")
-        scraper = SiiScraper(user, pw, True)
+        scraper = SiiScraper(user, pw, headless=True)
         df = scraper.scrape_all()
         df["sii_user"] = user
         all_dfs.append(df)
@@ -120,7 +120,7 @@ def main():
         # build your dedupe filter
         filt = {
             "supplier_id": row["supplier_id"],
-            "number":      row["number"],
+            "number": row["number"],
         }
 
         data = row.to_dict()
@@ -155,7 +155,7 @@ def debug_scraper():
     all_dfs = []
     print("Obteniendo datos de facturas desde SII")
 
-    scraper = SiiScraper(user="", pwd="", headless=True, use_certificate=True)
+    scraper = SiiScraper(user="", pwd="", headless=False, use_certificate=True, month="07")
     df = scraper.scrape_all()
     df["sii_user"] = ""
     all_dfs.append(df)
