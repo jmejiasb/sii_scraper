@@ -101,44 +101,38 @@ def main():
         scraper = SiiScraper(user, pw, headless=True)
         df = scraper.scrape_all()
         df["sii_user"] = user
-        all_dfs.append(df)
-    
-    # df = scraper.scrape_all()
-    #For debug
-    df = pd.concat(all_dfs, ignore_index=True)
-    df.to_csv("compras_df.csv", sep=";")
 
-    df_cleaned = clean_and_normalize(df)
-    print("Limpiando datos")
+        df_cleaned = clean_and_normalize(df)
+        print("Limpiando datos")
 
-    total = len(df_cleaned)
-    inserted = 0
-    updated = 0
-    for _, row in tqdm(df_cleaned.iterrows(), total=total, 
-                      desc="Sicronizando facturas", unit="inv"):
-        
-        # build your dedupe filter
-        filt = {
-            "supplier_id": row["supplier_id"],
-            "number": row["number"],
-        }
+        total = len(df_cleaned)
+        inserted = 0
+        updated = 0
+        for _, row in tqdm(df_cleaned.iterrows(), total=total, 
+                        desc="Sicronizando facturas", unit="inv"):
+            
+            # build your dedupe filter
+            filt = {
+                "supplier_id": row["supplier_id"],
+                "number": row["number"],
+            }
 
-        data = row.to_dict()
+            data = row.to_dict()
 
-        result = inv_supplier.update_one(
-            filt,
-            {"$set": {"status": data["status"]}}
-        )
+            result = inv_supplier.update_one(
+                filt,
+                {"$set": {"status": data["status"]}}
+            )
 
-        if result.matched_count:
-            # an existing document was found and updated
-            updated += 1
-        else:
-            # no existing doc → insert it
-            inv_supplier.insert_one(data)
-            inserted += 1
+            if result.matched_count:
+                # an existing document was found and updated
+                updated += 1
+            else:
+                # no existing doc → insert it
+                inv_supplier.insert_one(data)
+                inserted += 1
 
-    print(f"\nFinalizado: {inserted} nuevas facturas insertadas, {updated} facturas actualizadas")
+        print(f"\nFinalizado: {inserted} nuevas facturas insertadas, {updated} facturas actualizadas")
 
 def debug_scraper(): 
 
@@ -155,7 +149,7 @@ def debug_scraper():
     all_dfs = []
     print("Obteniendo datos de facturas desde SII")
 
-    scraper = SiiScraper(user="", pwd="", headless=False, use_certificate=True, month="07")
+    scraper = SiiScraper(user="", pwd="", use_certificate=True, headless=False)
     df = scraper.scrape_all()
     df["sii_user"] = ""
     all_dfs.append(df)

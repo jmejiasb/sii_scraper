@@ -441,7 +441,7 @@ class SiiScraper:
                 "tabaco_puro", "tabaco_cigarrillos", "tabaco_elaborado", "nce_or_nde", "rut_holding", "status", "doc_type"
             ]
 
-            wait = WebDriverWait(self.driver, 8)
+            wait = WebDriverWait(self.driver, 10)
 
             if (self.month):
                 periodoMes = self.wait.until(EC.element_to_be_clickable((By.ID, "periodoMes")))
@@ -573,7 +573,7 @@ class SiiScraper:
                 "tabaco_puro", "tabaco_cigarrillos", "tabaco_elaborado", "nce_or_nde", "rut_holding", "status", "doc_type"
             ]
 
-            wait = WebDriverWait(self.driver, 2)
+            wait = WebDriverWait(self.driver, 10)
 
             # periodoMes = self.wait.until(EC.element_to_be_clickable((By.ID, "periodoMes")))
             # month_sel = Select(periodoMes)
