@@ -32,6 +32,9 @@ class SiiScraper:
             "profile.managed_default_content_settings.images": 2,
             "profile.managed_default_content_settings.fonts": 2,
             "profile.managed_default_content_settings.stylesheets": 2,
+            "profile.password_manager_leak_detection": False,
+            "credentials_enable_service": False,
+            "profile.password_manager_enabled": False,
         }
 
         auto_select = {
