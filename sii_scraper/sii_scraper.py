@@ -451,6 +451,10 @@ class SiiScraper:
                 month_sel = Select(periodoMes)
                 month_sel.select_by_value(self.month)
 
+                # periodoAnyo = self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'select[ng-model="periodoAnho"]')))
+                # year_sel = Select(periodoAnyo)
+                # year_sel.select_by_value("2025")
+
             for idx in range(1, option_count): 
                 sel = Select(rut_select)
                 sel.select_by_index(idx)  # index 0 = placeholder, 1 = first RUT, 2 = second RUT

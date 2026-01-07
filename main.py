@@ -98,7 +98,7 @@ def main():
     print("Obteniendo datos de facturas desde SII")
     for user, pw in creds.items():
         print(f"Scraping facturas para {user}…")
-        scraper = SiiScraper(user, pw, headless=True)
+        scraper = SiiScraper(user, pw, headless=False, month="12")
         df = scraper.scrape_all()
         df["sii_user"] = user
 
@@ -149,7 +149,7 @@ def debug_scraper():
     all_dfs = []
     print("Obteniendo datos de facturas desde SII")
 
-    scraper = SiiScraper(user="", pwd="", use_certificate=True, headless=False)
+    scraper = SiiScraper(user="", pwd="", use_certificate=True, headless=False, month="12")
     df = scraper.scrape_all()
     df["sii_user"] = ""
     all_dfs.append(df)
