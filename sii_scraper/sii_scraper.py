@@ -455,93 +455,97 @@ class SiiScraper:
                 # year_sel = Select(periodoAnyo)
                 # year_sel.select_by_value("2025")
 
-            for idx in range(1, option_count): 
-                sel = Select(rut_select)
-                sel.select_by_index(idx)  # index 0 = placeholder, 1 = first RUT, 2 = second RUT
-                # time.sleep(5)
+            for idx in range(1, option_count):
+                try: 
+                    sel = Select(rut_select)
+                    sel.select_by_index(idx)  # index 0 = placeholder, 1 = first RUT, 2 = second RUT
+                    # time.sleep(5)
 
-                rut_value = sel.first_selected_option.get_attribute("value")
-                # (or use .text if you prefer the visible text)
-                print(f"Obteniendo facturas para RUT {rut_value!r}")
+                    rut_value = sel.first_selected_option.get_attribute("value")
+                    # (or use .text if you prefer the visible text)
+                    print(f"Obteniendo facturas para RUT {rut_value!r}")
 
-                wait.until(
-                    EC.invisibility_of_element_located((By.ID, "esperaDialog"))
-                )
+                    wait.until(
+                        EC.invisibility_of_element_located((By.ID, "esperaDialog"))
+                    )
 
-                # 2) Click “Consultar”
-                consult_btn = self.driver.find_element(
-                    By.CSS_SELECTOR,
-                    "form[name='formContribuyente'] button[type='submit']"
-                )
+                    # 2) Click “Consultar”
+                    consult_btn = self.driver.find_element(
+                        By.CSS_SELECTOR,
+                        "form[name='formContribuyente'] button[type='submit']"
+                    )
 
-                try:
-                    consult_btn.click()
-                except ElementClickInterceptedException:
-                    self.driver.execute_script("arguments[0].click();", consult_btn)
+                    try:
+                        consult_btn.click()
+                    except ElementClickInterceptedException:
+                        self.driver.execute_script("arguments[0].click();", consult_btn)
 
-                self._scrape_section(
-                    wait,
-                    "//a[contains(text(),'Factura Electrónica') and @ui-sref]",
-                    status="accepted",
-                    doc_type="invoice",
-                    rut_value=rut_value,
-                    all_rows=all_rows
-                )
+                    self._scrape_section(
+                        wait,
+                        "//a[contains(text(),'Factura Electrónica') and @ui-sref]",
+                        status="accepted",
+                        doc_type="invoice",
+                        rut_value=rut_value,
+                        all_rows=all_rows
+                    )
 
-                self._scrape_section(
-                    wait,
-                    "//a[contains(text(),'Factura no Afecta o Exenta Electrónica') and @ui-sref]",
-                    status="accepted_exempt",
-                    doc_type="invoice",
-                    rut_value=rut_value,
-                    all_rows=all_rows
-                )
-                
-                self._scrape_section(
-                    wait,
-                    "//a[contains(text(),'Nota de Crédito Electrónica') and @ui-sref]",
-                    status="accepted",
-                    doc_type="credit_note",
-                    rut_value=rut_value,
-                    all_rows=all_rows
-                )
+                    self._scrape_section(
+                        wait,
+                        "//a[contains(text(),'Factura no Afecta o Exenta Electrónica') and @ui-sref]",
+                        status="accepted_exempt",
+                        doc_type="invoice",
+                        rut_value=rut_value,
+                        all_rows=all_rows
+                    )
+                    
+                    self._scrape_section(
+                        wait,
+                        "//a[contains(text(),'Nota de Crédito Electrónica') and @ui-sref]",
+                        status="accepted",
+                        doc_type="credit_note",
+                        rut_value=rut_value,
+                        all_rows=all_rows
+                    )
 
-                self._click_pendientes(wait)
+                    self._click_pendientes(wait)
 
-                try:
-                    wait.until(EC.presence_of_element_located(
-                        (By.XPATH, "//td[@ng-if=\"(row.rsmnLink)\"]")
-                    ))
+                    try:
+                        wait.until(EC.presence_of_element_located(
+                            (By.XPATH, "//td[@ng-if=\"(row.rsmnLink)\"]")
+                        ))
+                    except TimeoutException:
+                        print(f"→ No pending‐documents table for RUT {rut_value}, skipping.")
+                        continue
+
+                    self._scrape_pending(
+                        wait,
+                        "//a[@ui-sref and contains(normalize-space(.), 'Factura Electrónica')]",
+                        status="pending",
+                        doc_type="invoice",
+                        rut_value=rut_value,
+                        all_rows=all_rows,
+                    )
+
+                    self._scrape_pending(
+                        wait,
+                        "//a[@ui-sref and contains(normalize-space(.), 'Factura no Afecta o Exenta Electrónica')]",
+                        status="pending_exempt",
+                        doc_type="invoice",
+                        rut_value=rut_value,
+                        all_rows=all_rows,
+                    )
+
+                    self._scrape_pending(
+                        wait,
+                        "//a[@ui-sref and contains(normalize-space(.), 'Nota de Crédito Electrónica')]",
+                        status="pending",
+                        doc_type="credit_note",
+                        rut_value=rut_value,
+                        all_rows=all_rows,
+                    )
                 except TimeoutException:
-                    print(f"→ No pending‐documents table for RUT {rut_value}, skipping.")
+                    print(f"Timeout processing RUT index {idx}, continuing")
                     continue
-
-                self._scrape_pending(
-                    wait,
-                     "//a[@ui-sref and contains(normalize-space(.), 'Factura Electrónica')]",
-                    status="pending",
-                    doc_type="invoice",
-                    rut_value=rut_value,
-                    all_rows=all_rows,
-                )
-
-                self._scrape_pending(
-                    wait,
-                    "//a[@ui-sref and contains(normalize-space(.), 'Factura no Afecta o Exenta Electrónica')]",
-                    status="pending_exempt",
-                    doc_type="invoice",
-                    rut_value=rut_value,
-                    all_rows=all_rows,
-                )
-
-                self._scrape_pending(
-                    wait,
-                    "//a[@ui-sref and contains(normalize-space(.), 'Nota de Crédito Electrónica')]",
-                    status="pending",
-                    doc_type="credit_note",
-                    rut_value=rut_value,
-                    all_rows=all_rows,
-                )
 
             if all_rows:
                 df = pd.DataFrame(all_rows, columns=headers, dtype=str)

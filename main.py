@@ -5,18 +5,22 @@ import pandas as pd
 from tqdm import tqdm
 from dotenv import load_dotenv
 from pymongo import MongoClient
+from selenium.common.exceptions import TimeoutException
 
 from sii_scraper.sii_scraper import SiiScraper
 
 load_dotenv()
+
+PROGRESS_FILE = "sii_progress.txt"
+
 
 def clean_and_normalize(df: pd.DataFrame) -> pd.DataFrame:
 
     df = df.copy()
 
     df = df[[
-        "supplier_id", "supplier_name", "number", "date", "date_accepted", 
-        "type", "exent_total", "net_total", "iva", "other_tax", 
+        "supplier_id", "supplier_name", "number", "date", "date_accepted",
+        "type", "exent_total", "net_total", "iva", "other_tax",
         "total", "rut_holding", "status", "doc_type"
     ]]
 
@@ -26,7 +30,7 @@ def clean_and_normalize(df: pd.DataFrame) -> pd.DataFrame:
         df[cols]
         .fillna("")
         .apply(lambda s: s.str.replace(".", "", regex=False)
-                        .str.lower())
+               .str.lower())
     )
 
     df["supplier_id"] = df["supplier_id"].str.upper()
@@ -35,7 +39,8 @@ def clean_and_normalize(df: pd.DataFrame) -> pd.DataFrame:
 
     df["date"] = pd.to_datetime(df["date"], format="%d/%m/%Y")
 
-    df["date_accepted"] =  pd.to_datetime(df["date_accepted"], format="%d/%m/%Y %H:%M:%S")
+    df["date_accepted"] = pd.to_datetime(
+        df["date_accepted"], format="%d/%m/%Y %H:%M:%S")
 
     df["date"] = (
         df["date"]
@@ -48,7 +53,7 @@ def clean_and_normalize(df: pd.DataFrame) -> pd.DataFrame:
         .dt.tz_localize("America/Santiago")
         .dt.tz_convert("UTC")
     )
-    
+
     df["type"] = df["type"].map({"p": "contado"}).fillna("")
 
     int_cols = ["exent_total", "net_total", "iva", "other_tax", "total"]
@@ -56,13 +61,26 @@ def clean_and_normalize(df: pd.DataFrame) -> pd.DataFrame:
     for col in int_cols:
         df[col] = (
             df[col]
-                .str.replace(".", "")
+            .str.replace(".", "")
                 .fillna("0")
                 .replace("", "0")
                 .astype("int64")
         )
 
     return df
+
+
+def load_completed_users():
+    if not os.path.exists(PROGRESS_FILE):
+        return set()
+    with open(PROGRESS_FILE) as f:
+        return set(line.strip() for line in f if line.strip())
+
+
+def mark_user_completed(user):
+    with open(PROGRESS_FILE, "a") as f:
+        f.write(f"{user}\n")
+
 
 def load_all_credentials() -> dict:
     """
@@ -82,13 +100,16 @@ def load_all_credentials() -> dict:
             creds[user] = pw
     return creds
 
-def main(): 
+
+def main():
 
     atlas_uri = os.getenv("MONGODB_URI")
     client = MongoClient(atlas_uri)
     db = client.arrocera_erp_db
     inv_supplier = db.invoices_supplier
     print("Conectado a base de datos")
+
+    completed_users = load_completed_users()
 
     creds = load_all_credentials()
     if not creds:
@@ -97,44 +118,60 @@ def main():
     all_dfs = []
     print("Obteniendo datos de facturas desde SII")
     for user, pw in creds.items():
+
+        if user in completed_users:
+            print(f"Skipping {user}, already completed")
+            continue
+
         print(f"Scraping facturas para {user}…")
-        scraper = SiiScraper(user, pw, headless=True)
-        df = scraper.scrape_all()
-        df["sii_user"] = user
+        try:
+            scraper = SiiScraper(user, pw, headless=True)
+            df = scraper.scrape_all()
+            df["sii_user"] = user
 
-        df_cleaned = clean_and_normalize(df)
-        print("Limpiando datos")
+            df_cleaned = clean_and_normalize(df)
+            print("Limpiando datos")
 
-        total = len(df_cleaned)
-        inserted = 0
-        updated = 0
-        for _, row in tqdm(df_cleaned.iterrows(), total=total, 
-                        desc="Sicronizando facturas", unit="inv"):
-            
-            # build your dedupe filter
-            filt = {
-                "supplier_id": row["supplier_id"],
-                "number": row["number"],
-            }
+            total = len(df_cleaned)
+            inserted = 0
+            updated = 0
+            for _, row in tqdm(df_cleaned.iterrows(), total=total,
+                               desc="Sicronizando facturas", unit="inv"):
 
-            data = row.to_dict()
+                # build your dedupe filter
+                filt = {
+                    "supplier_id": row["supplier_id"],
+                    "number": row["number"],
+                }
 
-            result = inv_supplier.update_one(
-                filt,
-                {"$set": {"status": data["status"]}}
-            )
+                data = row.to_dict()
 
-            if result.matched_count:
-                # an existing document was found and updated
-                updated += 1
-            else:
-                # no existing doc → insert it
-                inv_supplier.insert_one(data)
-                inserted += 1
+                result = inv_supplier.update_one(
+                    filt,
+                    {"$set": {"status": data["status"]}}
+                )
 
-        print(f"\nFinalizado: {inserted} nuevas facturas insertadas, {updated} facturas actualizadas")
+                if result.matched_count:
+                    # an existing document was found and updated
+                    updated += 1
+                    mark_user_completed(user)
+                else:
+                    # no existing doc → insert it
+                    inv_supplier.insert_one(data)
+                    inserted += 1
 
-def debug_scraper(): 
+            print(
+                f"\nFinalizado: {inserted} nuevas facturas insertadas, {updated} facturas actualizadas")
+        except TimeoutException:
+            print(f"Timeout while scraping {user}, continuing with next user")
+            continue
+        except Exception as e:
+            print(f"Error scraping {user}: {e}")
+            continue
+    if os.path.exists(PROGRESS_FILE):
+        os.remove(PROGRESS_FILE)
+
+def debug_scraper():
 
     atlas_uri = os.getenv("MONGODB_URI")
     client = MongoClient(atlas_uri)
@@ -149,7 +186,8 @@ def debug_scraper():
     all_dfs = []
     print("Obteniendo datos de facturas desde SII")
 
-    scraper = SiiScraper(user="", pwd="", use_certificate=True, headless=False, month="12")
+    scraper = SiiScraper(
+        user="", pwd="", use_certificate=True, headless=False, month="12")
     df = scraper.scrape_all()
     df["sii_user"] = ""
     all_dfs.append(df)
@@ -165,9 +203,9 @@ def debug_scraper():
     total = len(df_cleaned)
     inserted = 0
     updated = 0
-    for _, row in tqdm(df_cleaned.iterrows(), total=total, 
-                      desc="Sicronizando facturas", unit="inv"):
-        
+    for _, row in tqdm(df_cleaned.iterrows(), total=total,
+                       desc="Sicronizando facturas", unit="inv"):
+
         # build your dedupe filter
         filt = {
             "supplier_id": row["supplier_id"],
@@ -189,7 +227,9 @@ def debug_scraper():
             inv_supplier.insert_one(data)
             inserted += 1
 
-    print(f"\nFinalizado: {inserted} nuevas facturas insertadas, {updated} facturas actualizadas")
+    print(
+        f"\nFinalizado: {inserted} nuevas facturas insertadas, {updated} facturas actualizadas")
+
 
 if __name__ == "__main__":
 
